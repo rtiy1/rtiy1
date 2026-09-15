@@ -1,0 +1,419 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>rtiy1@github:~</title>
+<meta name="description" content="rtiy1 — interactive terminal. type 'help' to begin." />
+<style>
+  :root {
+    --green: #00ff41;
+    --dim: #0a8a2a;
+    --faint: #555;
+    --bg: #050a06;
+    --cyan: #37d3e0;
+    --amber: #ffb000;
+    --err: #ff5555;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { height: 100%; }
+  body {
+    background: var(--bg);
+    color: var(--green);
+    font-family: "Cascadia Code", "Fira Code", "JetBrains Mono", Consolas, "Courier New", monospace;
+    font-size: 15px;
+    line-height: 1.5;
+    overflow: hidden;
+  }
+  /* CRT overlays */
+  body::before {
+    content: ""; position: fixed; inset: 0; z-index: 40; pointer-events: none;
+    background: repeating-linear-gradient(0deg, rgba(0,0,0,.28) 0 1px, transparent 1px 3px);
+  }
+  body::after {
+    content: ""; position: fixed; inset: 0; z-index: 41; pointer-events: none;
+    background: radial-gradient(ellipse at center, transparent 55%, rgba(0,0,0,.6) 100%);
+    animation: flicker 5s infinite;
+  }
+  @keyframes flicker {
+    0%, 100% { opacity: 1; } 97% { opacity: 1; }
+    98% { opacity: .86; } 99% { opacity: .95; }
+  }
+  #matrix {
+    position: fixed; inset: 0; z-index: 0;
+    opacity: 0; transition: opacity .8s; pointer-events: none;
+  }
+  #matrix.on { opacity: .5; }
+  #terminal {
+    position: relative; z-index: 10;
+    height: 100vh; overflow-y: auto;
+    padding: 24px 28px 48px;
+    text-shadow: 0 0 6px rgba(0,255,65,.45);
+    white-space: pre-wrap; word-break: break-word;
+    cursor: text;
+  }
+  .line { min-height: 1.5em; }
+  .dim { color: var(--dim); }
+  .faint { color: var(--faint); }
+  .cyan { color: var(--cyan); }
+  .amber { color: var(--amber); }
+  .err { color: var(--err); }
+  .prompt { color: var(--green); font-weight: 700; }
+  a { color: var(--cyan); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  #input-line { display: flex; align-items: baseline; }
+  #input-line .prompt { white-space: pre; }
+  #typed { white-space: pre-wrap; word-break: break-all; }
+  .cursor {
+    display: inline-block; width: .62em; height: 1.15em;
+    background: var(--green); vertical-align: text-bottom;
+    animation: blink 1s step-end infinite;
+    box-shadow: 0 0 8px rgba(0,255,65,.8);
+  }
+  @keyframes blink { 50% { opacity: 0; } }
+  #kbd {
+    position: fixed; bottom: 0; left: 0; width: 2px; height: 2px;
+    opacity: 0; border: none; background: transparent; color: transparent;
+    caret-color: transparent;
+  }
+  ::-webkit-scrollbar { width: 8px; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: var(--dim); border-radius: 4px; }
+  @media (max-width: 640px) { body { font-size: 13px; } #terminal { padding: 14px 14px 40px; } }
+</style>
+</head>
+<body>
+<canvas id="matrix"></canvas>
+<div id="terminal">
+  <div id="output"></div>
+  <div id="input-line">
+    <span class="prompt">guest@rtiy1:~$&nbsp;</span><span id="typed"></span><span class="cursor"></span>
+  </div>
+</div>
+<input id="kbd" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" />
+
+<script>
+"use strict";
+
+const USER = "rtiy1";
+const $ = (id) => document.getElementById(id);
+const out = $("output"), term = $("terminal"), kbd = $("kbd"), typedEl = $("typed");
+
+const state = { history: [], hIdx: -1, booted: false, matrixOn: false };
+
+/* ---------- output helpers ---------- */
+function scroll() { term.scrollTop = term.scrollHeight; }
+function line(html, cls) {
+  const d = document.createElement("div");
+  d.className = "line" + (cls ? " " + cls : "");
+  if (html === undefined) d.innerHTML = "&nbsp;";
+  else d.innerHTML = html;
+  out.appendChild(d); scroll();
+  return d;
+}
+const esc = (s) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+async function typeLine(text, cls, cps = 900) {
+  const d = line("", cls);
+  let i = 0;
+  while (i < text.length) {
+    i += 2;
+    d.textContent = text.slice(0, i);
+    scroll();
+    await sleep(1000 / cps);
+  }
+  d.textContent = text;
+}
+
+/* ---------- fake filesystem ---------- */
+const FS = {
+  "about.txt": [
+    "rtiy1 — developer & builder.",
+    "",
+    "currently hacking on YeMuAINoval: an AI novel-writing",
+    "product with an embedded coding-agent runtime.",
+    "",
+    "interests: LLM agents · interactive fiction · dev tools",
+  ].join("\n"),
+  "skills.txt": [
+    "core       typescript · javascript · rust · python",
+    "frontend   react · vite · tauri",
+    "backend    bun · node.js",
+    "ops        docker · linux · git",
+    "ai         llm agents · agent runtimes · prompt engineering",
+  ].join("\n"),
+  "projects.txt": [
+    "YeMuAINoval   AI novel writing tool + embedded agent runtime",
+    "              https://github.com/rtiy1/YeMuAINoval",
+    "",
+    "rtiy1         this terminal. meta, right?",
+    "              https://github.com/rtiy1/rtiy1",
+    "",
+    "run 'repos' to list everything live from the github api.",
+  ].join("\n"),
+  "contact.txt": [
+    "github    https://github.com/rtiy1",
+    "site      https://rtiy1.github.io/rtiy1",
+    "",
+    "open an issue or a discussion on any repo — fastest way in.",
+  ].join("\n"),
+  "secrets.txt": "cat: secrets.txt: permission denied. nice try.",
+};
+
+/* ---------- commands ---------- */
+const BANNER = [
+  " ____  _____  ___  __   __  _ ",
+  "|  _ \\|_   _||_ _| \\ \\ / / / |",
+  "| |_) | | |   | |   \\ V /  | |",
+  "|  _ <  | |   | |    | |   | |",
+  "|_| \\_\\ |_|  |___|   |_|   |_|",
+].join("\n");
+
+const HELP = [
+  "available commands:",
+  "",
+  "  help          show this message",
+  "  whoami        who is rtiy1",
+  "  banner        print the banner",
+  "  neofetch      system info",
+  "  ls            list files          cat <f>    read a file",
+  "  skills        tech stack          projects   featured work",
+  "  repos         top repos (live api)            ",
+  "  stats         github stats (live api)         ",
+  "  contact       where to find me",
+  "  open <t>      open link — github | site | <repo-name>",
+  "  matrix        toggle the rain",
+  "  history       command history     clear      clear screen",
+  "  echo <t>      print text          date       current date",
+  "  exit          close session",
+  "",
+  "tip: ↑/↓ history, tab completion, ctrl+l to clear.",
+].join("\n");
+
+function fmtRepo(r) {
+  const name = r.name.padEnd(22).slice(0, 22);
+  const stars = String(r.stargazers_count).padStart(5);
+  const lang = (r.language || "-").padEnd(12).slice(0, 12);
+  const desc = (r.description || "").slice(0, 46);
+  return { name: r.name, row: ` ${name} ${stars}  ${lang} ${desc}` };
+}
+
+async function cmdRepos() {
+  line("fetching api.github.com/users/" + USER + "/repos ...", "dim");
+  try {
+    const res = await fetch(`https://api.github.com/users/${USER}/repos?per_page=100&sort=pushed`);
+    if (!res.ok) throw new Error("HTTP " + res.status);
+    const repos = await res.json();
+    repos.sort((a, b) => b.stargazers_count - a.stargazers_count);
+    line(" NAME                 STARS  LANGUAGE     DESCRIPTION", "faint");
+    for (const r of repos.slice(0, 10)) {
+      const f = fmtRepo(r);
+      line(`<a href="${r.html_url}" target="_blank" rel="noopener">${esc(f.row)}</a>`);
+    }
+    line(`\n${repos.length} public repos total. 'open <name>' to visit one.`, "dim");
+  } catch (e) {
+    line("error: " + e.message + " — api.github.com may be rate-limited. try again later.", "err");
+  }
+}
+
+async function cmdStats() {
+  line("fetching api.github.com/users/" + USER + " ...", "dim");
+  try {
+    const res = await fetch(`https://api.github.com/users/${USER}`);
+    if (!res.ok) throw new Error("HTTP " + res.status);
+    const u = await res.json();
+    const years = ((Date.now() - new Date(u.created_at)) / 3.15576e10).toFixed(1);
+    line([
+      ` handle          ${u.login}`,
+      ` name            ${u.name || "-"}`,
+      ` bio             ${u.bio || "-"}`,
+      ` public repos    ${u.public_repos}`,
+      ` followers       ${u.followers}`,
+      ` following       ${u.following}`,
+      ` member since    ${u.created_at.slice(0, 10)}  (~${years}y)`,
+    ].join("\n"));
+  } catch (e) {
+    line("error: " + e.message + " — api.github.com may be rate-limited. try again later.", "err");
+  }
+}
+
+function cmdNeofetch() {
+  const art = [
+    "   .--.   ",
+    "  |o_o |  ",
+    "  |:_/ |  ",
+    " //   \\ \\ ",
+    "(|     | )",
+    "/'\\_   _/`\\",
+    "\\___)=(___/",
+  ];
+  const info = [
+    "guest@rtiy1",
+    "-------------------",
+    "host: github.com/" + USER,
+    "kernel: rtiy1.sh 1.0",
+    "shell: webtty",
+    "terminal: crt-9000",
+    "langs: ts · rust · python",
+  ];
+  for (let i = 0; i < Math.max(art.length, info.length); i++) {
+    line(esc((art[i] || "          ") + "   " + (info[i] || "")));
+  }
+}
+
+function cmdOpen(arg) {
+  const targets = {
+    github: "https://github.com/" + USER,
+    site: "https://rtiy1.github.io/rtiy1",
+    yemu: "https://github.com/" + USER + "/YeMuAINoval",
+  };
+  if (!arg) return line("usage: open <github | site | <repo-name>>", "err");
+  if (arg === "site") return line("you're already here.", "dim");
+  const url = targets[arg] || `https://github.com/${USER}/${arg}`;
+  line("opening " + esc(url) + " ...", "dim");
+  window.open(url, "_blank", "noopener");
+}
+
+function cmdMatrix() {
+  state.matrixOn = !state.matrixOn;
+  $("matrix").classList.toggle("on", state.matrixOn);
+  if (state.matrixOn) startRain();
+  line(state.matrixOn ? "entering the matrix... ('matrix' again to stop)" : "welcome back.", "dim");
+}
+
+function cmdExit() {
+  line("logout\nconnection to rtiy1.github.io closed.", "dim");
+  setTimeout(() => line("\n...just kidding. you can't leave that easily. type 'help'.", "faint"), 600);
+}
+
+const COMMANDS = {
+  help: () => line(HELP),
+  whoami: () => line("rtiy1 — developer building AI tools & interactive fiction.\nnow hacking on: YeMuAINoval"),
+  banner: () => line(esc(BANNER), "cyan"),
+  neofetch: cmdNeofetch,
+  about: () => line(FS["about.txt"]),
+  skills: () => line(FS["skills.txt"]),
+  projects: () => line(FS["projects.txt"]),
+  contact: () => line(FS["contact.txt"]),
+  repos: cmdRepos,
+  stats: cmdStats,
+  open: cmdOpen,
+  matrix: cmdMatrix,
+  exit: cmdExit,
+  ls: () => line(Object.keys(FS).join("   "), "cyan"),
+  cat: (arg) => {
+    if (!arg) return line("usage: cat <file>", "err");
+    line(FS[arg] !== undefined ? FS[arg] : `cat: ${arg}: no such file or directory`, FS[arg] !== undefined ? "" : "err");
+  },
+  echo: (_a, rest) => line(esc(rest) || ""),
+  date: () => line(new Date().toString()),
+  pwd: () => line("/home/guest"),
+  history: () => line(state.history.map((h, i) => ` ${String(i + 1).padStart(3)}  ${h}`).join("\n") || "(empty)"),
+  clear: () => { out.innerHTML = ""; },
+  /* easter eggs */
+  sudo: () => line("[sudo] password for guest: ********\naccess granted. just kidding — this incident will be reported.", "amber"),
+  gui: () => line("error: X11 display not found. terminal is all you need.", "err"),
+  rm: () => line("rm: read-only filesystem. the terminal protects itself.", "err"),
+  vim: () => line("vim started. you will never escape.\n(just kidding — :q! worked this time)", "dim"),
+  emacs: () => line("emacs? on *my* terminal? denied.", "dim"),
+  ping: () => line("pong", "cyan"),
+};
+
+const CMD_NAMES = Object.keys(COMMANDS);
+
+function run(raw) {
+  const input = raw.trim();
+  if (!input) return;
+  state.history.push(input); state.hIdx = state.history.length;
+  const [cmd, ...rest] = input.split(/\s+/);
+  const argStr = input.slice(cmd.length).trim();
+  const fn = COMMANDS[cmd.toLowerCase()];
+  if (fn) fn(rest[0], argStr);
+  else line(`${cmd}: command not found. type 'help' for the list.`, "err");
+}
+
+/* ---------- input handling ---------- */
+function render() { typedEl.textContent = kbd.value; scroll(); }
+kbd.addEventListener("input", render);
+kbd.addEventListener("keydown", (e) => {
+  if (e.key === "Enter") {
+    const v = kbd.value;
+    line(`<span class="prompt">guest@rtiy1:~$&nbsp;</span>${esc(v)}`);
+    kbd.value = ""; render();
+    run(v);
+  } else if (e.key === "ArrowUp") {
+    e.preventDefault();
+    if (state.hIdx > 0) { state.hIdx--; kbd.value = state.history[state.hIdx] || ""; render(); }
+  } else if (e.key === "ArrowDown") {
+    e.preventDefault();
+    if (state.hIdx < state.history.length) { state.hIdx++; kbd.value = state.history[state.hIdx] || ""; render(); }
+  } else if (e.key === "Tab") {
+    e.preventDefault();
+    const parts = kbd.value.split(/\s+/);
+    if (parts.length === 1) {
+      const m = CMD_NAMES.filter((c) => c.startsWith(parts[0].toLowerCase()));
+      if (m.length === 1) kbd.value = m[0] + " ";
+      else if (m.length > 1) line(m.join("   "), "dim");
+    } else if (parts[0].toLowerCase() === "cat") {
+      const m = Object.keys(FS).filter((f) => f.startsWith(parts[1]));
+      if (m.length === 1) kbd.value = "cat " + m[0];
+    }
+    render();
+  } else if (e.key === "l" && e.ctrlKey) {
+    e.preventDefault(); out.innerHTML = "";
+  } else if (e.key === "c" && e.ctrlKey) {
+    line(`<span class="prompt">guest@rtiy1:~$&nbsp;</span>${esc(kbd.value)}^C`);
+    kbd.value = ""; render();
+  }
+});
+document.addEventListener("click", () => kbd.focus());
+document.addEventListener("keydown", () => { if (document.activeElement !== kbd) kbd.focus(); });
+
+/* ---------- matrix rain ---------- */
+const canvas = $("matrix"), ctx = canvas.getContext("2d");
+let drops = [], rainTimer = null;
+const GLYPHS = "アカサタナハマヤラワ0123456789ABCDEF<>+-*/";
+function sizeCanvas() {
+  canvas.width = innerWidth; canvas.height = innerHeight;
+  const cols = Math.floor(canvas.width / 16);
+  drops = Array.from({ length: cols }, () => Math.random() * -50);
+}
+function startRain() {
+  sizeCanvas();
+  if (rainTimer) return;
+  rainTimer = setInterval(() => {
+    ctx.fillStyle = "rgba(5,10,6,0.12)"; ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.fillStyle = "#00ff41"; ctx.font = "15px monospace";
+    drops.forEach((y, i) => {
+      ctx.fillText(GLYPHS[Math.floor(Math.random() * GLYPHS.length)], i * 16, y * 16);
+      drops[i] = y * 16 > canvas.height && Math.random() > 0.975 ? 0 : y + 1;
+    });
+    if (!state.matrixOn) { clearInterval(rainTimer); rainTimer = null; ctx.clearRect(0, 0, canvas.width, canvas.height); }
+  }, 50);
+}
+addEventListener("resize", () => { if (state.matrixOn) sizeCanvas(); });
+
+/* ---------- boot ---------- */
+async function boot() {
+  const seq = [
+    "[    0.000000] rtiy1.sh — booting webtty v1.0",
+    "[    0.000213] loading kernel modules .................. OK",
+    "[    0.001337] mounting /dev/github .................... OK",
+    "[    0.002046] handshake with api.github.com ........... OK",
+    "[    0.004200] starting session for guest .............. OK",
+    "",
+  ];
+  for (const l of seq) {
+    if (l) await typeLine(l, "dim", 2600); else line();
+  }
+  line(esc(BANNER), "cyan");
+  line("welcome to rtiy1's terminal. type 'help' to see what this thing can do.", "dim");
+  line("hint: 'repos' and 'stats' pull live data from the github api.\n", "faint");
+  state.booted = true;
+}
+boot();
+kbd.focus();
+</script>
+</body>
+</html>
