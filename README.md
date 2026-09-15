@@ -1,14 +1,9 @@
 # 你好，我是 rtiy1
 
-*"以代码写诗，以故事造梦。"*
-
-开发者，做 AI 工具和互动小说 —— 目前在写 [YeMuAINoval](https://github.com/rtiy1/YeMuAINoval)。
-
 ## 感兴趣的领域
 
-- LLM Agent 与智能体运行时
-- AI 叙事与互动小说
-- 开发者工具与桌面应用
+- LLM Agent 
+- Game Develop
 
 ## 数据统计
 
