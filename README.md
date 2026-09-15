@@ -1,6 +1,6 @@
 <div align="center">
 
-<a href="https://rtiy1.github.io/rtiy1"><img src="https://readme-typing-svg.demolab.com?font=Fira+Code&weight=600&size=28&duration=2500&pause=900&color=00FF41&center=true&vCenter=true&width=720&lines=%24+whoami;rtiy1+%E2%80%94+developer+%26+builder;%24+cat+current_project.txt;YeMuAINoval+%E2%80%94+AI+novel+writing+%2B+agent+runtime;%24+.%2Fexplore+--scroll-down" alt="typing svg" /></a>
+<a href="https://rtiy1.github.io/rtiy1"><img src="https://readme-typing-svg.demolab.com?font=Fira+Code&weight=600&size=28&duration=2500&pause=900&color=00FF41&background=0D1117&center=true&vCenter=true&width=720&lines=%24+whoami;rtiy1+%E2%80%94+developer+%26+builder;%24+cat+current_project.txt;YeMuAINoval+%E2%80%94+AI+novel+writing+%2B+agent+runtime;%24+.%2Fexplore+--scroll-down" alt="typing svg" /></a>
 
 <p>
   <img src="https://komarev.com/ghpvc/?username=rtiy1&label=PROFILE+VIEWS&color=0d1117&style=flat-square" alt="profile views" />
@@ -60,7 +60,7 @@ guest@rtiy1:~$ neofetch
 
 <div align="center">
   <a href="https://github.com/ryo-ma/github-profile-trophy">
-    <img src="https://github-profile-trophy.vercel.app/?username=rtiy1&theme=matrix&no-frame=true&no-bg=true&column=7&margin-w=8" alt="trophies" />
+    <img src="https://github-profile-trophy.vercel.app/?username=rtiy1&theme=matrix&no-frame=true&column=7&margin-w=8" alt="trophies" />
   </a>
 </div>
 
@@ -83,5 +83,5 @@ guest@rtiy1:~$ neofetch
 </div>
 
 <div align="center">
-  <img src="https://readme-typing-svg.demolab.com?font=Fira+Code&size=14&duration=2000&pause=1200&color=555555&center=true&vCenter=true&width=435&lines=%24+logout;%5BProcess+completed%5D+%E2%80%94+connection+closed" alt="logout" />
+  <img src="https://readme-typing-svg.demolab.com?font=Fira+Code&size=14&duration=2000&pause=1200&color=00FF41&background=0D1117&center=true&vCenter=true&width=435&lines=%24+logout;%5BProcess+completed%5D+%E2%80%94+connection+closed" alt="logout" />
 </div>
