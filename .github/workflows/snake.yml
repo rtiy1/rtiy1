@@ -2,7 +2,7 @@ name: Generate contribution snake
 
 on:
   schedule:
-    - cron: "0 0 * * *"
+    - cron: "47 */3 * * *"
   workflow_dispatch:
   push:
     branches: [main]
@@ -15,7 +15,29 @@ jobs:
       contents: write
 
     steps:
+      - name: Detect new activity
+        id: check
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          LAST=$(curl -sf -H "Authorization: Bearer $GH_TOKEN" \
+            "https://api.github.com/repos/${{ github.repository }}/commits?sha=output&per_page=1" \
+            | jq -r '.[0].commit.committer.date // empty')
+          LAST=${LAST:-1970-01-01T00:00:00Z}
+          NEW=$(curl -sf -H "Authorization: Bearer $GH_TOKEN" \
+            "https://api.github.com/users/${{ github.repository_owner }}/events/public?per_page=10" \
+            | jq -r '.[0].created_at // empty')
+          NEW=${NEW:-$(date -u +%Y-%m-%dT%H:%M:%SZ)}
+          echo "last snake generation: $LAST"
+          echo "latest activity:       $NEW"
+          if [ "$(date -d "$NEW" +%s)" -gt "$(date -d "$LAST" +%s)" ]; then
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Generate snake SVGs
+        if: steps.check.outputs.changed == 'true'
         uses: Platane/snk/svg-only@v3
         with:
           github_user_name: ${{ github.repository_owner }}
@@ -24,6 +46,7 @@ jobs:
             dist/github-snake-dark.svg?palette=github-dark&color_snake=#00ff41
 
       - name: Push to output branch
+        if: steps.check.outputs.changed == 'true'
         uses: crazy-max/ghaction-github-pages@v4
         with:
           target_branch: output

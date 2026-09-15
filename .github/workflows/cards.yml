@@ -2,7 +2,7 @@ name: Generate profile summary cards
 
 on:
   schedule:
-    - cron: "0 6 * * *"
+    - cron: "17 */3 * * *"
   workflow_dispatch:
   push:
     branches: [main]
@@ -16,7 +16,31 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
-      - uses: vn7n24fzkq/github-profile-summary-cards@release
+
+      - name: Detect new activity
+        id: check
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          LAST=$(curl -sf -H "Authorization: Bearer $GH_TOKEN" \
+            "https://api.github.com/repos/${{ github.repository }}/commits?path=profile-summary-card-output&per_page=1" \
+            | jq -r '.[0].commit.committer.date // empty')
+          LAST=${LAST:-1970-01-01T00:00:00Z}
+          NEW=$(curl -sf -H "Authorization: Bearer $GH_TOKEN" \
+            "https://api.github.com/users/${{ github.repository_owner }}/events/public?per_page=10" \
+            | jq -r '.[0].created_at // empty')
+          NEW=${NEW:-$(date -u +%Y-%m-%dT%H:%M:%SZ)}
+          echo "last cards generation: $LAST"
+          echo "latest activity:       $NEW"
+          if [ "$(date -d "$NEW" +%s)" -gt "$(date -d "$LAST" +%s)" ]; then
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Generate cards
+        if: steps.check.outputs.changed == 'true'
+        uses: vn7n24fzkq/github-profile-summary-cards@release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
